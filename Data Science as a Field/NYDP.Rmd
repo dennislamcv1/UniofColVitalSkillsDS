@@ -1,0 +1,233 @@
+---
+title: "NYDP Historic Shooting Data Analysis"
+output: html_document
+date: "2024-07-09"
+---
+
+
+## Start an Rmd document that describes and imports the shooting project dataset in a reproducible manner.
+
+
+
+```{r setup, include=FALSE}
+# Load necessary libraries
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(hms)
+```
+
+```{r}
+# Define the path to the CSV file
+file_path <- "nypdhistoric.csv"
+
+# Import the dataset
+shooting_data <- read_csv(file_path)
+
+# Display the first few rows of the dataset
+head(shooting_data)
+```
+
+
+## Project Step 2: Tidy and Transform Your Data
+
+```{r}
+# Display the structure of the dataset
+str(shooting_data)
+
+# Display a summary of the dataset
+summary(shooting_data)
+
+```
+
+### Data Cleaning
+
+```{r}
+# Convert appropriate columns to factor type
+shooting_data <- shooting_data %>%
+  mutate(across(c(BORO, LOC_OF_OCCUR_DESC, LOC_CLASSFCTN_DESC, LOCATION_DESC, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE), as_factor))
+
+```
+
+
+```{r}
+# Check the first few values of OCCUR_DATE to determine the format
+head(shooting_data$OCCUR_DATE)
+
+# Convert OCCUR_DATE to date type
+shooting_data <- shooting_data %>%
+  mutate(OCCUR_DATE = case_when(
+    str_detect(OCCUR_DATE, "^\\d{2}/\\d{2}/\\d{4}$") ~ mdy(OCCUR_DATE),
+    TRUE ~ NA_Date_
+  ))
+
+# Check if any dates failed to parse
+failed_dates <- shooting_data %>% filter(is.na(OCCUR_DATE))
+if(nrow(failed_dates) > 0) {
+  print("Failed to parse the following dates:")
+  print(failed_dates$OCCUR_DATE)
+}
+
+```
+
+```{r}
+# Removing unnecessary columns, such as INCIDENT_KEY and Lon_Lat
+shooting_data <- shooting_data %>%
+  select(-c(INCIDENT_KEY, Lon_Lat))
+
+# Display the cleaned data structure
+str(shooting_data)
+
+# Display a summary of the cleaned dataset
+summary(shooting_data)
+```
+
+
+### Handling Missing Data
+
+
+
+```{r}
+# Check for missing data
+missing_data_summary <- shooting_data %>%
+  summarise(across(everything(), ~ sum(is.na(.))))
+
+# Display missing data summary
+missing_data_summary
+
+# Plan for handling missing data
+# If there is missing data, handle it as follows:
+# - For numerical columns, we can fill missing values with the median or mean.
+# - For factor columns, we can fill missing values with the most frequent level.
+# - For date columns, we can either fill missing values with a specific date or remove rows with missing dates.
+shooting_data <- shooting_data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  mutate(across(where(is.factor), ~ fct_explicit_na(.))) %>%
+  mutate(across(where(is.Date), ~ ifelse(is.na(.), as.Date("1900-01-01"), .)))
+
+# Display the summary after handling missing data
+summary(shooting_data)
+
+```
+
+
+## Project Step 3: Add Visualizations and Analysis
+
+```{r}
+# Plot the number of incidents per borough
+ggplot(shooting_data, aes(x = BORO)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Number of Incidents per Borough", x = "Borough", y = "Number of Incidents") +
+  theme_minimal()
+
+```
+
+
+```{r warning=FALSE}
+# Filter out rows with NA in OCCUR_DATE
+shooting_data <- shooting_data %>% filter(!is.na(OCCUR_DATE))
+
+# Extract month and year from OCCUR_DATE
+shooting_data <- shooting_data %>%
+  mutate(Month_Year = floor_date(OCCUR_DATE, "month"))
+
+# Plot the number of incidents per month
+ggplot(shooting_data, aes(x = Month_Year)) +
+  geom_line(stat = "count", color = "darkred") +
+  labs(title = "Monthly Trend of Incidents", x = "Month", y = "Number of Incidents") +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+# Extract year and month for heatmap
+shooting_data <- shooting_data %>%
+  mutate(Year = year(OCCUR_DATE), Month = month(OCCUR_DATE, label = TRUE))
+
+# Create a heatmap
+ggplot(shooting_data, aes(x = Month, y = factor(PRECINCT))) +
+  geom_tile(aes(fill = ..count..), stat = "count") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(title = "Heatmap of Incidents per Precinct Over Time", x = "Month", y = "Precinct", fill = "Number of Incidents") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+### Analysis
+
+Based on the visualizations above, we can make the following observations:
+
+1. **Incidents per Borough**: The bar plot shows the distribution of shooting incidents across different boroughs. This raises additional questions such as:
+   - Why are certain boroughs experiencing more incidents than others?
+   - Are there specific areas within these boroughs that are more prone to incidents?
+
+2. **Monthly Trend**: The line plot illustrates the trend of incidents over time. It can help identify any seasonal patterns or trends. This raises further questions like:
+   - Are there specific months with higher incidents?
+   - What external factors (e.g., holidays, events) might contribute to the observed trends?
+
+3. **Heatmap of Incidents per Precinct Over Time**: The heatmap shows the distribution of incidents across different precincts and months. This raises additional questions such as:
+   - Are there specific precincts with consistently high incidents?
+   - How do incidents vary by month across different precincts?
+
+## Project Step 4: Add Bias Identification
+
+## Conclusion
+
+This R Markdown document demonstrates the process of importing, cleaning, summarizing, and analyzing the NYC Historic Shooting dataset. The visualizations and analysis provide initial insights and raise additional questions for further investigation.
+
+### Key Findings
+
+1. **Incidents per Borough**: The analysis shows a significant variation in the number of shooting incidents across different boroughs. Certain boroughs like Bronx and Brooklyn have higher numbers of incidents compared to others. This raises questions about underlying factors contributing to these differences, such as socio-economic conditions, law enforcement presence, and community programs.
+
+2. **Monthly Trend**: The monthly trend analysis reveals fluctuations in the number of incidents over time. There are noticeable peaks and troughs that might correspond with specific events or seasonal patterns. Further investigation is required to understand these trends better and identify any external factors that may influence them.
+
+3. **Heatmap of Incidents per Precinct Over Time**: The heatmap visualization highlights the distribution of incidents across different precincts and months. Some precincts consistently show higher numbers of incidents, suggesting the need for targeted interventions and resources to address the issue.
+
+### Bias Identification and Mitigation
+
+#### Possible Sources of Bias
+
+1. **Data Bias**: The dataset may have inherent biases due to underreporting or inconsistencies in how incidents are recorded. Some incidents might not be reported or categorized correctly, leading to an incomplete or skewed representation of the actual situation.
+
+2. **Selection Bias**: The analysis is limited to the data available in the `nypdhistoric.csv` file. Any biases in the selection of data for inclusion in this dataset will directly affect the conclusions drawn from it. For example, certain types of incidents or locations might be overrepresented or underrepresented.
+
+3. **Temporal Bias**: The dataset covers a specific time period, and trends observed during this period may not be generalizable to other time periods. Factors influencing shooting incidents may change over time due to policy changes, economic shifts, or other external influences.
+
+#### Personal Bias and Mitigation
+
+As an analyst, my personal biases might influence the interpretation of the data and the conclusions drawn. These biases could stem from my own experiences, background, or expectations. To mitigate these biases, I have taken the following steps:
+
+1. **Objective Analysis**: I relied on objective statistical methods and visualizations to analyze the data, minimizing subjective interpretations. All transformations and analyses were performed using reproducible code to ensure transparency.
+
+2. **Peer Review**: I shared my findings with peers and incorporated their feedback to ensure a more balanced perspective. This collaborative approach helps identify any potential biases or blind spots in my analysis.
+
+3. **Clear Documentation**: Throughout the analysis, I documented all steps and decisions made, providing a clear rationale for each. This transparency allows others to understand the methodology and identify any potential biases.
+
+4. **Diverse Perspectives**: I actively sought out and considered diverse perspectives by reviewing relevant literature and engaging with experts from different fields. This helps ensure a more comprehensive understanding of the issue and mitigates the influence of personal biases.
+
+### Future Work
+
+To build on the findings of this analysis, future work could include:
+
+1. **Incorporating Additional Data**: Integrating other datasets, such as socio-economic indicators, weather data, or law enforcement activities, could provide a more comprehensive understanding of the factors influencing shooting incidents.
+
+2. **Spatial Analysis**: Conducting a more detailed spatial analysis at the neighborhood or block level could help identify specific hotspots and underlying factors contributing to higher incidents in certain areas.
+
+3. **Temporal Analysis**: Analyzing trends over a longer period and considering potential external influences, such as policy changes or significant events, could provide deeper insights into the temporal patterns observed.
+
+4. **Predictive Modeling**: Developing predictive models to forecast future incidents based on historical data and external factors could help in proactive resource allocation and intervention strategies.
+
+By addressing these areas, we can gain a more nuanced understanding of shooting incidents in NYC and develop more effective strategies to reduce their occurrence and impact.
+
+## Conclusion
+
+The analysis presented in this document provides valuable insights into the patterns and trends of shooting incidents in NYC. While the findings raise important questions for further investigation, it is crucial to acknowledge and address potential biases to ensure a balanced and accurate interpretation of the data. By continuing to refine our analysis and incorporate additional data and perspectives, we can work towards a more comprehensive understanding of this critical issue.
+
+
+
+
